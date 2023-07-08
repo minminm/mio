@@ -1,4 +1,6 @@
 use std::net::{self, SocketAddr};
+#[cfg(target_os = "arceos")]
+use std::os::arceos::net::{AsRawTcpSocket, AxTcpSocketHandle, FromRawTcpSocket, IntoRawTcpSocket};
 #[cfg(unix)]
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 #[cfg(target_os = "wasi")]
@@ -62,6 +64,8 @@ impl TcpListener {
         let listener = unsafe { TcpListener::from_raw_fd(socket) };
         #[cfg(windows)]
         let listener = unsafe { TcpListener::from_raw_socket(socket as _) };
+        #[cfg(target_os = "arceos")]
+        let listener = unsafe { TcpListener::from_raw_socket(socket) };
 
         // On platforms with Berkeley-derived sockets, this allows to quickly
         // rebind a socket, without needing to wait for the OS to clean up the
@@ -70,7 +74,7 @@ impl TcpListener {
         // On Windows, this allows rebinding sockets which are actively in use,
         // which allows “socket hijacking”, so we explicitly don't set it here.
         // https://docs.microsoft.com/en-us/windows/win32/winsock/using-so-reuseaddr-and-so-exclusiveaddruse
-        #[cfg(not(windows))]
+        #[cfg(unix)]
         set_reuseaddr(&listener.inner, true)?;
 
         bind(&listener.inner, addr)?;
@@ -217,6 +221,27 @@ impl FromRawSocket for TcpListener {
     /// non-blocking mode.
     unsafe fn from_raw_socket(socket: RawSocket) -> TcpListener {
         TcpListener::from_std(FromRawSocket::from_raw_socket(socket))
+    }
+}
+
+#[cfg(target_os = "arceos")]
+impl IntoRawTcpSocket for TcpListener {
+    fn into_raw_socket(self) -> AxTcpSocketHandle {
+        self.inner.into_inner().into_raw_socket()
+    }
+}
+
+#[cfg(target_os = "arceos")]
+impl AsRawTcpSocket for TcpListener {
+    fn as_raw_socket(&self) -> &AxTcpSocketHandle {
+        self.inner.as_raw_socket()
+    }
+}
+
+#[cfg(target_os = "arceos")]
+impl FromRawTcpSocket for TcpListener {
+    unsafe fn from_raw_socket(socket: AxTcpSocketHandle) -> TcpListener {
+        TcpListener::from_std(FromRawTcpSocket::from_raw_socket(socket))
     }
 }
 

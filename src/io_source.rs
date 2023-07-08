@@ -1,4 +1,6 @@
 use std::ops::{Deref, DerefMut};
+#[cfg(target_os = "arceos")]
+use std::os::arceos::net::AsRawTcpSocket;
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 #[cfg(target_os = "wasi")]
@@ -199,6 +201,34 @@ where
         #[cfg(debug_assertions)]
         self.selector_id.remove_association(_registry)?;
         self.state.deregister()
+    }
+}
+
+#[cfg(target_os = "arceos")]
+impl<T> event::Source for IoSource<T>
+where
+    T: AsRawTcpSocket,
+{
+    fn register(
+        &mut self,
+        registry: &Registry,
+        token: Token,
+        interests: Interest,
+    ) -> io::Result<()> {
+        todo!()
+    }
+
+    fn reregister(
+        &mut self,
+        registry: &Registry,
+        token: Token,
+        interests: Interest,
+    ) -> io::Result<()> {
+        todo!()
+    }
+
+    fn deregister(&mut self, _registry: &Registry) -> io::Result<()> {
+        todo!()
     }
 }
 
