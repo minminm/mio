@@ -1,6 +1,6 @@
 macro_rules! os_required {
     () => {
-        panic!("unimplemented OS operations")
+        panic!("unimplemented OS operations in ArceOS")
     };
 }
 

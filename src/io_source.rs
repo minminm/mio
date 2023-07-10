@@ -1,6 +1,4 @@
 use std::ops::{Deref, DerefMut};
-#[cfg(target_os = "arceos")]
-use std::os::arceos::net::AsRawTcpSocket;
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 #[cfg(target_os = "wasi")]
@@ -13,6 +11,9 @@ use std::{fmt, io};
 
 use crate::sys::IoSourceState;
 use crate::{event, Interest, Registry, Token};
+
+#[cfg(target_os = "arceos")]
+use crate::sys::tcp::AsRawTcpSocketArc;
 
 /// Adapter for a [`RawFd`] or [`RawSocket`] providing an [`event::Source`]
 /// implementation.
@@ -104,6 +105,7 @@ impl<T> IoSource<T> {
     /// [`deregister`] it.
     ///
     /// [`deregister`]: Registry::deregister
+    #[cfg(not(target_os = "arceos"))]
     pub fn into_inner(self) -> T {
         self.inner
     }
@@ -207,7 +209,7 @@ where
 #[cfg(target_os = "arceos")]
 impl<T> event::Source for IoSource<T>
 where
-    T: AsRawTcpSocket,
+    T: AsRawTcpSocketArc,
 {
     fn register(
         &mut self,
@@ -215,7 +217,9 @@ where
         token: Token,
         interests: Interest,
     ) -> io::Result<()> {
-        todo!()
+        registry
+            .selector()
+            .register(token, interests, self.inner.as_raw_socket_arc())
     }
 
     fn reregister(
@@ -224,11 +228,15 @@ where
         token: Token,
         interests: Interest,
     ) -> io::Result<()> {
-        todo!()
+        registry
+            .selector()
+            .reregister(token, interests, self.inner.as_raw_socket_arc())
     }
 
-    fn deregister(&mut self, _registry: &Registry) -> io::Result<()> {
-        todo!()
+    fn deregister(&mut self, registry: &Registry) -> io::Result<()> {
+        registry
+            .selector()
+            .deregister(self.inner.as_raw_socket_arc())
     }
 }
 

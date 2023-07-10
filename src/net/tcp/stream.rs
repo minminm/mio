@@ -2,7 +2,7 @@ use std::fmt;
 use std::io::{self, IoSlice, IoSliceMut, Read, Write};
 use std::net::{self, Shutdown, SocketAddr};
 #[cfg(target_os = "arceos")]
-use std::os::arceos::net::{AsRawTcpSocket, AxTcpSocketHandle, FromRawTcpSocket, IntoRawTcpSocket};
+use std::os::arceos::net::{AxTcpSocketHandle, FromRawTcpSocket};
 #[cfg(unix)]
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 #[cfg(target_os = "wasi")]
@@ -14,6 +14,9 @@ use crate::io_source::IoSource;
 #[cfg(not(target_os = "wasi"))]
 use crate::sys::tcp::{connect, new_for_addr};
 use crate::{event, Interest, Registry, Token};
+
+#[cfg(target_os = "arceos")]
+use crate::sys::tcp::AxTcpStream;
 
 /// A non-blocking TCP stream between a local socket and a remote socket.
 ///
@@ -48,7 +51,10 @@ use crate::{event, Interest, Registry, Token};
 /// # }
 /// ```
 pub struct TcpStream {
+    #[cfg(not(target_os = "arceos"))]
     inner: IoSource<net::TcpStream>,
+    #[cfg(target_os = "arceos")]
+    inner: IoSource<AxTcpStream>,
 }
 
 impl TcpStream {
@@ -109,7 +115,10 @@ impl TcpStream {
     /// the standard library).
     pub fn from_std(stream: net::TcpStream) -> TcpStream {
         TcpStream {
+            #[cfg(not(target_os = "arceos"))]
             inner: IoSource::new(stream),
+            #[cfg(target_os = "arceos")]
+            inner: IoSource::new(AxTcpStream::from_std(stream)),
         }
     }
 
@@ -404,23 +413,11 @@ impl FromRawSocket for TcpStream {
 }
 
 #[cfg(target_os = "arceos")]
-impl IntoRawTcpSocket for TcpStream {
-    fn into_raw_socket(self) -> AxTcpSocketHandle {
-        self.inner.into_inner().into_raw_socket()
-    }
-}
-
-#[cfg(target_os = "arceos")]
-impl AsRawTcpSocket for TcpStream {
-    fn as_raw_socket(&self) -> &AxTcpSocketHandle {
-        self.inner.as_raw_socket()
-    }
-}
-
-#[cfg(target_os = "arceos")]
 impl FromRawTcpSocket for TcpStream {
     unsafe fn from_raw_socket(socket: AxTcpSocketHandle) -> TcpStream {
-        TcpStream::from_std(FromRawTcpSocket::from_raw_socket(socket))
+        TcpStream {
+            inner: IoSource::new(AxTcpStream::from_raw_socket(socket)),
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 use std::net::{self, SocketAddr};
 #[cfg(target_os = "arceos")]
-use std::os::arceos::net::{AsRawTcpSocket, AxTcpSocketHandle, FromRawTcpSocket, IntoRawTcpSocket};
+use std::os::arceos::net::{AxTcpSocketHandle, FromRawTcpSocket};
 #[cfg(unix)]
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 #[cfg(target_os = "wasi")]
@@ -16,6 +16,9 @@ use crate::sys::tcp::set_reuseaddr;
 #[cfg(not(target_os = "wasi"))]
 use crate::sys::tcp::{bind, listen, new_for_addr};
 use crate::{event, sys, Interest, Registry, Token};
+
+#[cfg(target_os = "arceos")]
+use crate::sys::tcp::AxTcpListener;
 
 /// A structure representing a socket server
 ///
@@ -44,7 +47,10 @@ use crate::{event, sys, Interest, Registry, Token};
 /// # }
 /// ```
 pub struct TcpListener {
+    #[cfg(not(target_os = "arceos"))]
     inner: IoSource<net::TcpListener>,
+    #[cfg(target_os = "arceos")]
+    inner: IoSource<AxTcpListener>,
 }
 
 impl TcpListener {
@@ -90,7 +96,10 @@ impl TcpListener {
     /// in non-blocking mode.
     pub fn from_std(listener: net::TcpListener) -> TcpListener {
         TcpListener {
+            #[cfg(not(target_os = "arceos"))]
             inner: IoSource::new(listener),
+            #[cfg(target_os = "arceos")]
+            inner: IoSource::new(AxTcpListener::from_std(listener)),
         }
     }
 
@@ -104,7 +113,17 @@ impl TcpListener {
     /// returned along with it.
     pub fn accept(&self) -> io::Result<(TcpStream, SocketAddr)> {
         self.inner.do_io(|inner| {
-            sys::tcp::accept(inner).map(|(stream, addr)| (TcpStream::from_std(stream), addr))
+            sys::tcp::accept(inner).map(|(stream, addr)| {
+                (
+                    #[cfg(not(target_os = "arceos"))]
+                    TcpStream::from_std(stream),
+                    #[cfg(target_os = "arceos")]
+                    unsafe {
+                        TcpStream::from_raw_socket(stream.into_raw_socket())
+                    },
+                    addr,
+                )
+            })
         })
     }
 
@@ -225,23 +244,11 @@ impl FromRawSocket for TcpListener {
 }
 
 #[cfg(target_os = "arceos")]
-impl IntoRawTcpSocket for TcpListener {
-    fn into_raw_socket(self) -> AxTcpSocketHandle {
-        self.inner.into_inner().into_raw_socket()
-    }
-}
-
-#[cfg(target_os = "arceos")]
-impl AsRawTcpSocket for TcpListener {
-    fn as_raw_socket(&self) -> &AxTcpSocketHandle {
-        self.inner.as_raw_socket()
-    }
-}
-
-#[cfg(target_os = "arceos")]
 impl FromRawTcpSocket for TcpListener {
     unsafe fn from_raw_socket(socket: AxTcpSocketHandle) -> TcpListener {
-        TcpListener::from_std(FromRawTcpSocket::from_raw_socket(socket))
+        TcpListener {
+            inner: IoSource::new(AxTcpListener::from_raw_socket(socket)),
+        }
     }
 }
 
