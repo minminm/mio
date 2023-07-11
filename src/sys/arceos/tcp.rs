@@ -19,7 +19,10 @@ pub(crate) fn bind(socket: &AxTcpListener, addr: SocketAddr) -> io::Result<()> {
 }
 
 pub(crate) fn connect(socket: &AxTcpStream, addr: SocketAddr) -> io::Result<()> {
-    cvt(api::ax_tcp_connect(&socket.inner, addr))
+    match cvt(api::ax_tcp_connect(&socket.inner, addr)) {
+        Err(err) if err.kind() != io::ErrorKind::WouldBlock => Err(err),
+        _ => Ok(()),
+    }
 }
 
 pub(crate) fn listen(socket: &AxTcpListener, backlog: u32) -> io::Result<()> {
@@ -91,7 +94,7 @@ impl AxTcpStream {
     }
 
     pub fn take_error(&self) -> io::Result<Option<io::Error>> {
-        os_required!()
+        Ok(None)
     }
 
     pub fn peek(&self, _: &mut [u8]) -> io::Result<usize> {

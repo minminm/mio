@@ -7,10 +7,10 @@ pub struct Waker {}
 
 impl Waker {
     pub fn new(_: &Selector, _: Token) -> io::Result<Waker> {
-        os_required!();
+        Ok(Waker {}) // TODO
     }
 
     pub fn wake(&self) -> io::Result<()> {
-        os_required!();
+        Ok(()) // TODO
     }
 }
