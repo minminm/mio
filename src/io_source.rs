@@ -13,7 +13,7 @@ use crate::sys::IoSourceState;
 use crate::{event, Interest, Registry, Token};
 
 #[cfg(target_os = "arceos")]
-use crate::sys::tcp::AsRawTcpSocketArc;
+use crate::sys::AsRawSocketArc;
 
 /// Adapter for a [`RawFd`] or [`RawSocket`] providing an [`event::Source`]
 /// implementation.
@@ -35,7 +35,6 @@ use crate::sys::tcp::AsRawTcpSocketArc;
 ///
 /// [`Poll`]: crate::Poll
 /// [`do_io`]: IoSource::do_io
-/*
 ///
 /// # Examples
 ///
@@ -61,7 +60,6 @@ use crate::sys::tcp::AsRawTcpSocketArc;
 /// #     Ok(())
 /// # }
 /// ```
-*/
 pub struct IoSource<T> {
     state: IoSourceState,
     inner: T,
@@ -209,7 +207,7 @@ where
 #[cfg(target_os = "arceos")]
 impl<T> event::Source for IoSource<T>
 where
-    T: AsRawTcpSocketArc,
+    T: AsRawSocketArc,
 {
     fn register(
         &mut self,

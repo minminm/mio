@@ -4,7 +4,9 @@ use std::net::{self, Shutdown, SocketAddr};
 use std::sync::Arc;
 
 use std::os::arceos::api::net as api;
-use std::os::arceos::net::{AxTcpSocketHandle, IntoRawTcpSocket};
+use std::os::arceos::net::{AxSocketHandle, AxTcpSocketHandle, IntoRawTcpSocket};
+use crate::sys::AsRawSocketArc;
+use crate::sys::arceos::AxSocketHandle::Tcp;
 
 use super::cvt;
 
@@ -15,29 +17,25 @@ pub(crate) fn new_for_addr(_: SocketAddr) -> io::Result<AxTcpSocketHandle> {
 }
 
 pub(crate) fn bind(socket: &AxTcpListener, addr: SocketAddr) -> io::Result<()> {
-    cvt(api::ax_tcp_bind(&socket.inner, addr))
+    cvt(api::ax_tcp_bind(&socket.as_raw_socket(), addr))
 }
 
 pub(crate) fn connect(socket: &AxTcpStream, addr: SocketAddr) -> io::Result<()> {
-    match cvt(api::ax_tcp_connect(&socket.inner, addr)) {
+    match cvt(api::ax_tcp_connect(&socket.as_raw_socket(), addr)) {
         Err(err) if err.kind() != io::ErrorKind::WouldBlock => Err(err),
         _ => Ok(()),
     }
 }
 
 pub(crate) fn listen(socket: &AxTcpListener, backlog: u32) -> io::Result<()> {
-    cvt(api::ax_tcp_listen(&socket.inner, backlog as usize))
+    cvt(api::ax_tcp_listen(&socket.as_raw_socket(), backlog as usize))
 }
 
 pub(crate) fn accept(socket: &AxTcpListener) -> io::Result<(AxTcpStream, SocketAddr)> {
-    let (handle, addr) = cvt(api::ax_tcp_accept(&socket.inner))?;
+    let (handle, addr) = cvt(api::ax_tcp_accept(&socket.as_raw_socket()))?;
     cvt(api::ax_tcp_set_nonblocking(&handle, true))?;
     let socket = unsafe { AxTcpStream::from_raw_socket(handle) };
     Ok((socket, addr))
-}
-
-pub(crate) trait AsRawTcpSocketArc {
-    fn as_raw_socket_arc(&self) -> &Arc<AxTcpSocketHandle>;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -45,36 +43,48 @@ pub(crate) trait AsRawTcpSocketArc {
 ////////////////////////////////////////////////////////////////////////////////
 
 pub(crate) struct AxTcpStream {
-    inner: Arc<AxTcpSocketHandle>,
+    inner: Arc<AxSocketHandle>,
 }
 
 impl AxTcpStream {
     pub fn from_std(stream: net::TcpStream) -> Self {
         Self {
-            inner: Arc::new(stream.into_raw_socket()),
+            inner: Arc::new(Tcp(stream.into_raw_socket())),
         }
     }
 
     pub unsafe fn from_raw_socket(handle: AxTcpSocketHandle) -> Self {
         Self {
-            inner: Arc::new(handle),
+            inner: Arc::new(Tcp(handle)),
         }
     }
 
     pub fn into_raw_socket(self) -> AxTcpSocketHandle {
-        Arc::into_inner(self.inner).unwrap()
+        if let Tcp(handle) = Arc::into_inner(self.inner).unwrap() {
+            handle
+        } else {
+            panic!("bind: NOT tcp handle!");
+        }
+    }
+
+    pub fn as_raw_socket(&self) -> &AxTcpSocketHandle {
+        if let Tcp(handle) = &self.inner.as_ref() {
+            handle
+        } else {
+            panic!("bind: NOT tcp handle!");
+        }
     }
 
     pub fn peer_addr(&self) -> io::Result<SocketAddr> {
-        cvt(api::ax_tcp_peer_addr(&self.inner))
+        cvt(api::ax_tcp_peer_addr(&self.as_raw_socket()))
     }
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        cvt(api::ax_tcp_socket_addr(&self.inner))
+        cvt(api::ax_tcp_socket_addr(&self.as_raw_socket()))
     }
 
     pub fn shutdown(&self, _: Shutdown) -> io::Result<()> {
-        cvt(api::ax_tcp_shutdown(&self.inner))
+        cvt(api::ax_tcp_shutdown(&self.as_raw_socket()))
     }
 
     pub fn set_nodelay(&self, _: bool) -> io::Result<()> {
@@ -102,7 +112,7 @@ impl AxTcpStream {
     }
 
     pub fn _read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        cvt(api::ax_tcp_recv(&self.inner, buf))
+        cvt(api::ax_tcp_recv(&self.as_raw_socket(), buf))
     }
 
     pub fn _read_vectored(&self, _: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
@@ -110,17 +120,23 @@ impl AxTcpStream {
     }
 
     pub fn _write(&self, buf: &[u8]) -> io::Result<usize> {
-        cvt(api::ax_tcp_send(&self.inner, buf))
+        cvt(api::ax_tcp_send(&self.as_raw_socket(), buf))
     }
 
-    pub fn _write_vectored(&self, _: &[IoSlice<'_>]) -> io::Result<usize> {
-        os_required!()
+    pub fn _write_vectored(&self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        let mut size: usize = 0;
+
+        for buf in bufs.iter() {
+            size += cvt(api::ax_tcp_send(&self.as_raw_socket(), buf))?;
+        }
+
+        Ok(size)
     }
 }
 
-impl AsRawTcpSocketArc for AxTcpStream {
+impl AsRawSocketArc for AxTcpStream {
     #[inline]
-    fn as_raw_socket_arc(&self) -> &Arc<AxTcpSocketHandle> {
+    fn as_raw_socket_arc(&self) -> &Arc<AxSocketHandle> {
         &self.inner
     }
 }
@@ -170,24 +186,24 @@ impl Write for &AxTcpStream {
 ////////////////////////////////////////////////////////////////////////////////
 
 pub(crate) struct AxTcpListener {
-    inner: Arc<AxTcpSocketHandle>,
+    inner: Arc<AxSocketHandle>,
 }
 
 impl AxTcpListener {
     pub fn from_std(listener: net::TcpListener) -> Self {
         Self {
-            inner: Arc::new(listener.into_raw_socket()),
+            inner: Arc::new(Tcp(listener.into_raw_socket())),
         }
     }
 
-    pub unsafe fn from_raw_socket(handle: AxTcpSocketHandle) -> Self {
+    pub unsafe fn from_raw_socket(handle: AxSocketHandle) -> Self {
         Self {
             inner: Arc::new(handle),
         }
     }
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        cvt(api::ax_tcp_socket_addr(&self.inner))
+        cvt(api::ax_tcp_socket_addr(&self.as_raw_socket()))
     }
 
     pub fn set_ttl(&self, _: u32) -> io::Result<()> {
@@ -201,11 +217,19 @@ impl AxTcpListener {
     pub fn take_error(&self) -> io::Result<Option<io::Error>> {
         os_required!()
     }
+
+    pub fn as_raw_socket(&self) -> &AxTcpSocketHandle {
+        if let Tcp(handle) = &self.inner.as_ref() {
+            handle
+        } else {
+            panic!("NOT tcp handle!");
+        }
+    }
 }
 
-impl AsRawTcpSocketArc for AxTcpListener {
+impl AsRawSocketArc for AxTcpListener {
     #[inline]
-    fn as_raw_socket_arc(&self) -> &Arc<AxTcpSocketHandle> {
+    fn as_raw_socket_arc(&self) -> &Arc<AxSocketHandle> {
         &self.inner
     }
 }

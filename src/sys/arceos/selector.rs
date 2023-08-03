@@ -4,8 +4,9 @@ use std::collections::HashMap;
 use std::io;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use std::os::arceos::api::net::{self as api, AxTcpSocketHandle};
+use std::os::arceos::api::net::{self as api, AxSocketHandle};
 
 #[derive(Clone)]
 pub struct Event {
@@ -39,25 +40,28 @@ impl Event {
 
 #[derive(Debug)]
 struct SocketState {
-    inner: Weak<AxTcpSocketHandle>,
+    inner: Weak<AxSocketHandle>,
     interests: Interest,
 }
 
 #[derive(Debug)]
 pub struct Selector {
     sockets: Arc<Mutex<HashMap<usize, SocketState>>>,
+    waiting: AtomicUsize,
 }
 
 impl Selector {
     pub fn new() -> io::Result<Self> {
         Ok(Self {
             sockets: Arc::new(Mutex::new(HashMap::new())),
+            waiting: AtomicUsize::new(0),
         })
     }
 
     pub fn try_clone(&self) -> io::Result<Selector> {
         Ok(Self {
             sockets: self.sockets.clone(),
+            waiting: AtomicUsize::new(0),
         })
     }
 
@@ -74,18 +78,38 @@ impl Selector {
                 .retain(|&token, SocketState { inner, interests }| {
                     if let Some(socket) = inner.upgrade() {
                         if events.len() < max_events {
-                            match api::ax_tcp_poll(&socket) {
-                                Ok(res) => {
-                                    let event = Event::new(
-                                        token,
-                                        interests.is_readable() && res.readable,
-                                        interests.is_writable() && res.writable,
-                                    );
-                                    if event.is_readable || event.is_writable {
-                                        events.push(event);
+                            match socket.as_ref() {
+                                AxSocketHandle::Tcp(socket) => {
+                                    match api::ax_tcp_poll(&socket) {
+                                        Ok(res) => {
+                                            let event = Event::new(
+                                                token,
+                                                interests.is_readable() && res.readable,
+                                                interests.is_writable() && res.writable,
+                                            );
+                                            if event.is_readable || event.is_writable {
+                                                events.push(event);
+                                            }
+                                        }
+                                        Err(_) => events.push(Event::new_error(token)),
+                                    }
+                                },
+                                AxSocketHandle::Udp(socket) => {
+                                    match api::ax_udp_poll(&socket) {
+                                        Ok(res) => {
+                                            let event = Event::new(
+                                                token,
+                                                interests.is_readable() && res.readable,
+                                                interests.is_writable() && res.writable,
+                                            );
+                                            //println!("+++++++++++++ event {:?} {:?}", event.is_readable, event.is_writable);
+                                            if event.is_readable || event.is_writable {
+                                                events.push(event);
+                                            }
+                                        }
+                                        Err(_) => events.push(Event::new_error(token)),
                                     }
                                 }
-                                Err(_) => events.push(Event::new_error(token)),
                             }
                         }
                         true
@@ -95,12 +119,18 @@ impl Selector {
                 });
 
             if !events.is_empty() {
+                const MAX_WAITING_TIMES: usize = 9;
+                if self.waiting.fetch_add(1, Ordering::SeqCst) > MAX_WAITING_TIMES {
+                    self.waiting.store(0, Ordering::Relaxed);
+                    std::thread::yield_now();
+                }
                 return Ok(());
             }
             if deadline.map_or(false, |ddl| Instant::now() >= ddl) {
                 return Err(io::ErrorKind::Interrupted.into());
             }
             std::thread::yield_now();
+            self.waiting.fetch_add(1, Ordering::SeqCst);
         }
     }
 
@@ -108,7 +138,7 @@ impl Selector {
         &self,
         token: Token,
         interests: Interest,
-        socket: &Arc<AxTcpSocketHandle>,
+        socket: &Arc<AxSocketHandle>,
     ) -> io::Result<()> {
         self.sockets.lock().unwrap().insert(
             usize::from(token),
@@ -124,7 +154,7 @@ impl Selector {
         &self,
         token: Token,
         interests: Interest,
-        socket: &Arc<AxTcpSocketHandle>,
+        socket: &Arc<AxSocketHandle>,
     ) -> io::Result<()> {
         let mut sockets = self.sockets.lock().unwrap();
         let entry = sockets
@@ -139,7 +169,7 @@ impl Selector {
         Err(io::ErrorKind::InvalidInput.into())
     }
 
-    pub fn deregister(&self, _socket: &Arc<AxTcpSocketHandle>) -> io::Result<()> {
+    pub fn deregister(&self, _socket: &Arc<AxSocketHandle>) -> io::Result<()> {
         // deregistration is done in `select()` after the last strong reference is dropped
         Ok(())
     }

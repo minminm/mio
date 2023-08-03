@@ -12,7 +12,9 @@ mod waker;
 #[cfg(not(target_os = "wasi"))]
 pub(crate) use self::waker::Waker;
 
+use std::sync::Arc;
 use std::os::arceos::api::AxResult;
+use std::os::arceos::net::AxSocketHandle;
 
 #[inline]
 fn cvt<T>(t: AxResult<T>) -> std::io::Result<T> {
@@ -23,8 +25,12 @@ fn cvt<T>(t: AxResult<T>) -> std::io::Result<T> {
 }
 
 cfg_net! {
+    pub(crate) trait AsRawSocketArc {
+        fn as_raw_socket_arc(&self) -> &Arc<AxSocketHandle>;
+    }
+
     pub(crate) mod tcp;
-    // pub(crate) mod udp;
+    pub(crate) mod udp;
     #[cfg(unix)]
     pub(crate) mod uds;
 }

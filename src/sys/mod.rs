@@ -14,6 +14,7 @@
 //! * `tcp` and `udp` modules: see the [`crate::net`] module.
 //! * `Waker`: see [`crate::Waker`].
 
+#[cfg(not(target_os = "arceos"))]
 cfg_os_poll! {
     macro_rules! debug_detail {
         (

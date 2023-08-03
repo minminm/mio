@@ -18,6 +18,10 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 #[cfg(windows)]
 use std::os::windows::io::{AsRawSocket, FromRawSocket, IntoRawSocket, RawSocket};
+#[cfg(target_os = "arceos")]
+use crate::sys::udp::AxUdpSocket;
+#[cfg(target_os = "arceos")]
+use std::os::arceos::net::{AxSocketHandle, AxUdpSocketHandle, FromRawUdpSocket};
 
 /// A User Datagram Protocol socket.
 ///
@@ -89,7 +93,10 @@ use std::os::windows::io::{AsRawSocket, FromRawSocket, IntoRawSocket, RawSocket}
 /// # }
 /// ```
 pub struct UdpSocket {
+    #[cfg(not(target_os = "arceos"))]
     inner: IoSource<net::UdpSocket>,
+    #[cfg(target_os = "arceos")]
+    inner: IoSource<AxUdpSocket>,
 }
 
 impl UdpSocket {
@@ -118,8 +125,40 @@ impl UdpSocket {
     /// #    Ok(())
     /// # }
     /// ```
+    #[cfg(not(target_os = "arceos"))]
     pub fn bind(addr: SocketAddr) -> io::Result<UdpSocket> {
-        sys::udp::bind(addr).map(UdpSocket::from_std)
+        sys::udp::bind(addr).map(UdpSocket::from_std);
+    }
+
+    /// Creates a UDP socket from the given address.
+    ///
+    /// # Examples
+    ///
+    #[cfg_attr(feature = "os-poll", doc = "```")]
+    #[cfg_attr(not(feature = "os-poll"), doc = "```ignore")]
+    /// # use std::error::Error;
+    /// #
+    /// # fn main() -> Result<(), Box<dyn Error>> {
+    /// use mio::net::UdpSocket;
+    ///
+    /// // We must bind it to an open address.
+    /// let socket = match UdpSocket::bind("127.0.0.1:0".parse()?) {
+    ///     Ok(new_socket) => new_socket,
+    ///     Err(fail) => {
+    ///         // We panic! here, but you could try to bind it again on another address.
+    ///         panic!("Failed to bind socket. {:?}", fail);
+    ///     }
+    /// };
+    ///
+    /// // Our socket was created, but we should not use it before checking it's readiness.
+    /// #    drop(socket); // Silence unused variable warning.
+    /// #    Ok(())
+    /// # }
+    /// ```
+    #[cfg(target_os = "arceos")]
+    pub fn bind(addr: SocketAddr) -> io::Result<UdpSocket> {
+        let socket = sys::udp::bind(addr)?;
+        Ok(unsafe {UdpSocket::from_raw_socket(socket)})
     }
 
     /// Creates a new `UdpSocket` from a standard `net::UdpSocket`.
@@ -130,7 +169,10 @@ impl UdpSocket {
     /// non-blocking mode.
     pub fn from_std(socket: net::UdpSocket) -> UdpSocket {
         UdpSocket {
+            #[cfg(not(target_os = "arceos"))]
             inner: IoSource::new(socket),
+            #[cfg(target_os = "arceos")]
+            inner: IoSource::new(AxUdpSocket::from_std(socket)),
         }
     }
 
@@ -666,6 +708,17 @@ impl FromRawFd for UdpSocket {
     /// non-blocking mode.
     unsafe fn from_raw_fd(fd: RawFd) -> UdpSocket {
         UdpSocket::from_std(FromRawFd::from_raw_fd(fd))
+    }
+}
+
+#[cfg(target_os = "arceos")]
+impl FromRawUdpSocket for UdpSocket {
+    unsafe fn from_raw_socket(socket: AxUdpSocketHandle) -> UdpSocket {
+        UdpSocket {
+            inner: IoSource::new(
+                AxUdpSocket::from_raw_socket(AxSocketHandle::Udp(socket))
+            ),
+        }
     }
 }
 

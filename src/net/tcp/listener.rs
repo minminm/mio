@@ -1,6 +1,6 @@
 use std::net::{self, SocketAddr};
 #[cfg(target_os = "arceos")]
-use std::os::arceos::net::{AxTcpSocketHandle, FromRawTcpSocket};
+use std::os::arceos::net::{AxSocketHandle, AxTcpSocketHandle, FromRawTcpSocket};
 #[cfg(unix)]
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 #[cfg(target_os = "wasi")]
@@ -247,7 +247,9 @@ impl FromRawSocket for TcpListener {
 impl FromRawTcpSocket for TcpListener {
     unsafe fn from_raw_socket(socket: AxTcpSocketHandle) -> TcpListener {
         TcpListener {
-            inner: IoSource::new(AxTcpListener::from_raw_socket(socket)),
+            inner: IoSource::new(
+                AxTcpListener::from_raw_socket(AxSocketHandle::Tcp(socket))
+            ),
         }
     }
 }
