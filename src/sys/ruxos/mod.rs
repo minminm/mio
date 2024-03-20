@@ -1,6 +1,6 @@
 macro_rules! os_required {
     () => {
-        panic!("unimplemented OS operations in ArceOS")
+        panic!("unimplemented OS operations in ruxos")
     };
 }
 
@@ -12,7 +12,7 @@ mod waker;
 #[cfg(not(target_os = "wasi"))]
 pub(crate) use self::waker::Waker;
 
-use std::os::arceos::api::AxResult;
+use std::os::ruxos::api::AxResult;
 
 #[inline]
 fn cvt<T>(t: AxResult<T>) -> std::io::Result<T> {

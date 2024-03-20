@@ -5,7 +5,7 @@ use std::io;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
-use std::os::arceos::api::net::{self as api, AxTcpSocketHandle};
+use std::os::ruxos::api::net::{self as api, AxTcpSocketHandle};
 
 #[derive(Clone)]
 pub struct Event {

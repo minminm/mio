@@ -3,8 +3,8 @@ use std::io::{self, IoSlice, IoSliceMut, Read, Write};
 use std::net::{self, Shutdown, SocketAddr};
 use std::sync::Arc;
 
-use std::os::arceos::api::net as api;
-use std::os::arceos::net::{AxTcpSocketHandle, IntoRawTcpSocket};
+use std::os::ruxos::api::net as api;
+use std::os::ruxos::net::{AxTcpSocketHandle, IntoRawTcpSocket};
 
 use super::cvt;
 

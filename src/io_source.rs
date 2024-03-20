@@ -12,7 +12,7 @@ use std::{fmt, io};
 use crate::sys::IoSourceState;
 use crate::{event, Interest, Registry, Token};
 
-#[cfg(target_os = "arceos")]
+#[cfg(target_os = "ruxos")]
 use crate::sys::tcp::AsRawTcpSocketArc;
 
 /// Adapter for a [`RawFd`] or [`RawSocket`] providing an [`event::Source`]
@@ -105,7 +105,7 @@ impl<T> IoSource<T> {
     /// [`deregister`] it.
     ///
     /// [`deregister`]: Registry::deregister
-    #[cfg(not(target_os = "arceos"))]
+    #[cfg(not(target_os = "ruxos"))]
     pub fn into_inner(self) -> T {
         self.inner
     }
@@ -206,7 +206,7 @@ where
     }
 }
 
-#[cfg(target_os = "arceos")]
+#[cfg(target_os = "ruxos")]
 impl<T> event::Source for IoSource<T>
 where
     T: AsRawTcpSocketArc,

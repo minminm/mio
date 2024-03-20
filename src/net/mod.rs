@@ -28,9 +28,9 @@
 mod tcp;
 pub use self::tcp::{TcpListener, TcpStream};
 
-#[cfg(all(not(target_os = "wasi"), not(target_os = "arceos")))]
+#[cfg(all(not(target_os = "wasi"), not(target_os = "ruxos")))]
 mod udp;
-#[cfg(all(not(target_os = "wasi"), not(target_os = "arceos")))]
+#[cfg(all(not(target_os = "wasi"), not(target_os = "ruxos")))]
 pub use self::udp::UdpSocket;
 
 #[cfg(unix)]

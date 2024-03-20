@@ -1,8 +1,8 @@
 use std::fmt;
 use std::io::{self, IoSlice, IoSliceMut, Read, Write};
 use std::net::{self, Shutdown, SocketAddr};
-#[cfg(target_os = "arceos")]
-use std::os::arceos::net::{AxTcpSocketHandle, FromRawTcpSocket};
+#[cfg(target_os = "ruxos")]
+use std::os::ruxos::net::{AxTcpSocketHandle, FromRawTcpSocket};
 #[cfg(unix)]
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 #[cfg(target_os = "wasi")]
@@ -15,7 +15,7 @@ use crate::io_source::IoSource;
 use crate::sys::tcp::{connect, new_for_addr};
 use crate::{event, Interest, Registry, Token};
 
-#[cfg(target_os = "arceos")]
+#[cfg(target_os = "ruxos")]
 use crate::sys::tcp::AxTcpStream;
 
 /// A non-blocking TCP stream between a local socket and a remote socket.
@@ -51,9 +51,9 @@ use crate::sys::tcp::AxTcpStream;
 /// # }
 /// ```
 pub struct TcpStream {
-    #[cfg(not(target_os = "arceos"))]
+    #[cfg(not(target_os = "ruxos"))]
     inner: IoSource<net::TcpStream>,
-    #[cfg(target_os = "arceos")]
+    #[cfg(target_os = "ruxos")]
     inner: IoSource<AxTcpStream>,
 }
 
@@ -95,7 +95,7 @@ impl TcpStream {
         let stream = unsafe { TcpStream::from_raw_fd(socket) };
         #[cfg(windows)]
         let stream = unsafe { TcpStream::from_raw_socket(socket as _) };
-        #[cfg(target_os = "arceos")]
+        #[cfg(target_os = "ruxos")]
         let stream = unsafe { TcpStream::from_raw_socket(socket) };
         connect(&stream.inner, addr)?;
         Ok(stream)
@@ -115,9 +115,9 @@ impl TcpStream {
     /// the standard library).
     pub fn from_std(stream: net::TcpStream) -> TcpStream {
         TcpStream {
-            #[cfg(not(target_os = "arceos"))]
+            #[cfg(not(target_os = "ruxos"))]
             inner: IoSource::new(stream),
-            #[cfg(target_os = "arceos")]
+            #[cfg(target_os = "ruxos")]
             inner: IoSource::new(AxTcpStream::from_std(stream)),
         }
     }
@@ -412,7 +412,7 @@ impl FromRawSocket for TcpStream {
     }
 }
 
-#[cfg(target_os = "arceos")]
+#[cfg(target_os = "ruxos")]
 impl FromRawTcpSocket for TcpStream {
     unsafe fn from_raw_socket(socket: AxTcpSocketHandle) -> TcpStream {
         TcpStream {

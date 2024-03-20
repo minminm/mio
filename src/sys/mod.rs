@@ -69,10 +69,10 @@ cfg_os_poll! {
     pub(crate) use self::wasi::*;
 }
 
-#[cfg(target_os = "arceos")]
+#[cfg(target_os = "ruxos")]
 cfg_os_poll! {
-    mod arceos;
-    pub(crate) use self::arceos::*;
+    mod ruxos;
+    pub(crate) use self::ruxos::*;
 }
 
 cfg_not_os_poll! {

@@ -1,6 +1,6 @@
 use std::net::{self, SocketAddr};
-#[cfg(target_os = "arceos")]
-use std::os::arceos::net::{AxTcpSocketHandle, FromRawTcpSocket};
+#[cfg(target_os = "ruxos")]
+use std::os::ruxos::net::{AxTcpSocketHandle, FromRawTcpSocket};
 #[cfg(unix)]
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 #[cfg(target_os = "wasi")]
@@ -17,7 +17,7 @@ use crate::sys::tcp::set_reuseaddr;
 use crate::sys::tcp::{bind, listen, new_for_addr};
 use crate::{event, sys, Interest, Registry, Token};
 
-#[cfg(target_os = "arceos")]
+#[cfg(target_os = "ruxos")]
 use crate::sys::tcp::AxTcpListener;
 
 /// A structure representing a socket server
@@ -47,9 +47,9 @@ use crate::sys::tcp::AxTcpListener;
 /// # }
 /// ```
 pub struct TcpListener {
-    #[cfg(not(target_os = "arceos"))]
+    #[cfg(not(target_os = "ruxos"))]
     inner: IoSource<net::TcpListener>,
-    #[cfg(target_os = "arceos")]
+    #[cfg(target_os = "ruxos")]
     inner: IoSource<AxTcpListener>,
 }
 
@@ -70,7 +70,7 @@ impl TcpListener {
         let listener = unsafe { TcpListener::from_raw_fd(socket) };
         #[cfg(windows)]
         let listener = unsafe { TcpListener::from_raw_socket(socket as _) };
-        #[cfg(target_os = "arceos")]
+        #[cfg(target_os = "ruxos")]
         let listener = unsafe { TcpListener::from_raw_socket(socket) };
 
         // On platforms with Berkeley-derived sockets, this allows to quickly
@@ -96,9 +96,9 @@ impl TcpListener {
     /// in non-blocking mode.
     pub fn from_std(listener: net::TcpListener) -> TcpListener {
         TcpListener {
-            #[cfg(not(target_os = "arceos"))]
+            #[cfg(not(target_os = "ruxos"))]
             inner: IoSource::new(listener),
-            #[cfg(target_os = "arceos")]
+            #[cfg(target_os = "ruxos")]
             inner: IoSource::new(AxTcpListener::from_std(listener)),
         }
     }
@@ -115,9 +115,9 @@ impl TcpListener {
         self.inner.do_io(|inner| {
             sys::tcp::accept(inner).map(|(stream, addr)| {
                 (
-                    #[cfg(not(target_os = "arceos"))]
+                    #[cfg(not(target_os = "ruxos"))]
                     TcpStream::from_std(stream),
-                    #[cfg(target_os = "arceos")]
+                    #[cfg(target_os = "ruxos")]
                     unsafe {
                         TcpStream::from_raw_socket(stream.into_raw_socket())
                     },
@@ -243,7 +243,7 @@ impl FromRawSocket for TcpListener {
     }
 }
 
-#[cfg(target_os = "arceos")]
+#[cfg(target_os = "ruxos")]
 impl FromRawTcpSocket for TcpListener {
     unsafe fn from_raw_socket(socket: AxTcpSocketHandle) -> TcpListener {
         TcpListener {
